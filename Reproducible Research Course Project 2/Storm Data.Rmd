@@ -1,0 +1,262 @@
+---
+title: "Course Project 2"
+author: "George Farmer"
+date: "1/22/2021"
+output: html_document
+---
+#Reproducible Research - Course Project 2
+
+##A critical analysis of weather data and patterns through the NOAA Storm Database and how storms effect Economics and Health.
+
+###Synopsis
+
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
+
+This database, (The NOAA Storm Tracker Database) tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage. My analysis shows that in terms of human collateral damage and injury, Tornadoes are the biggest overall threat while in terms of shear destructive power Flooding and Flash Flooding cause multibillions of dollars in damages as well as Hurricanes.
+
+```{r setup, include = TRUE, cache = FALSE}
+#Setting work enviroment
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(error = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(dev="png")
+#Loading relevant Libraries
+library(ggplot2)  
+library(plyr)
+library(dplyr)
+#Set working directory
+here <- getwd()
+setwd(here)
+```
+###Data Download
+
+Downloading data set from National Weather Service via: 
+https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2
+
+Additional information is avaliable from:
+https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf
+
+And an FAQ at:
+https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf
+
+```{r echo = TRUE} 
+#Download Data
+fileUrl<-"https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(fileUrl, destfile="StormData.csv.bz2", method="curl")
+path_rf <- file.path("./repdata%2Fdata%2FStormData")
+
+#Assigning variable to data
+stormData <- read.csv("StormData.csv.bz2")
+str(stormData)
+```
+
+The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. More recent years should be considered more complete.
+
+```{r echo = TRUE}
+dim(stormData)
+```
+
+This Database contains a extraordinary amount of data with 37 variables and 902297 records. A lot of these variables give coordinates, cities where they occur. but what we want to look at in particular are the Length, Width, F category, magnitude, Fatalities, Property and crop damage and when they occurred. 
+
+###Extracting Variables
+```{r echo = TRUE}
+
+#Extracting Variables
+variables <- c("EVTYPE", "LENGTH", "WIDTH", "F", "MAG", "FATALITIES", "INJURIES", "PROPDMGEXP", "PROPDMG", "CROPDMG", "CROPDMGEXP")
+
+#Putting variables in a new data set
+stormDamage <- stormData[, variables]
+
+```
+
+Now we can begin working with the specific data we need and break them down into categories, and look for the usual suspect, so to speak. Here's a list of the top 10 highest storms on the chart.
+
+```{r echo = TRUE}
+sort(table(stormDamage$EVTYPE), decreasing = TRUE)[1:10]
+```
+
+The Property and Crop damage need some cleaning up so that it's a useable data set, 
+
+```{r echo = TRUE}
+table(stormDamage$PROPDMGEXP)
+table(stormDamage$CROPDMGEXP)
+```
+
+Both exponents are converted to uppercase to adapt all the exponents with the same meaning (eg. h and H). The next steps convert the exponents into corresponding factors:
+“”, “?”, “+”, “-”: 1
+“0”: 1
+“1”: 10
+“2”: 100
+“3”: 1.000
+“4”: 10.000
+“5”: 100.000
+“6”: 1.000.000
+“7”: 10.000.000
+“8”: 100.000.000
+“9”: 1.000.000.000
+“H”: 100
+“K”: 1.000
+“M”: 1.000.000
+*“B”: 1.000.000.000
+
+
+```{r echo = TRUE}
+#Changing the case of the records for legibility
+stormDamage$PROPDMGEXP <- toupper(stormDamage$PROPDMGEXP)
+stormDamage$CROPDMGEXP <- toupper(stormDamage$CROPDMGEXP)
+
+#Assigning damage amounts the variables
+stormDamage$CROPDMGFACTOR[(stormDamage$CROPDMGEXP == "")] <- 10^0
+stormDamage$CROPDMGFACTOR[(stormDamage$CROPDMGEXP == "?")] <- 10^0
+stormDamage$CROPDMGFACTOR[(stormDamage$CROPDMGEXP == "0")] <- 10^0
+stormDamage$CROPDMGFACTOR[(stormDamage$CROPDMGEXP == "2")] <- 10^2
+stormDamage$CROPDMGFACTOR[(stormDamage$CROPDMGEXP == "K")] <- 10^3
+stormDamage$CROPDMGFACTOR[(stormDamage$CROPDMGEXP == "M")] <- 10^6
+stormDamage$CROPDMGFACTOR[(stormDamage$CROPDMGEXP == "B")] <- 10^9
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "")] <- 10^0
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "-")] <- 10^0
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "?")] <- 10^0
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "+")] <- 10^0
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "0")] <- 10^0
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "1")] <- 10^1
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "2")] <- 10^2
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "3")] <- 10^3
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "4")] <- 10^4
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "5")] <- 10^5
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "6")] <- 10^6
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "7")] <- 10^7
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "8")] <- 10^8
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "H")] <- 10^2
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "K")] <- 10^3
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "M")] <- 10^6
+stormDamage$PROPDMGFACTOR[(stormDamage$PROPDMGEXP == "B")] <- 10^9
+
+#Displaying Results
+sort(table(stormDamage$PROPDMGFACTOR), decreasing = TRUE)[1:10]
+sort(table(stormDamage$CROPDMGFACTOR), decreasing = TRUE)[1:10]
+
+```
+
+In this case it might be important to note the lack of data in the Crop Damage as compared to the Property damage, so will leave that be.
+
+###Data Analysis
+
+It would be good to look at different parts of this and to analyze different aspects.
+
+
+```{r echo = TRUE}
+injuries <- stormDamage %>% group_by(INJURIES) %>%
+                filter(INJURIES >= 1) %>%
+                arrange(desc(INJURIES))
+injuries
+                
+```
+
+Here we have Injuries sorted by highest injury count to the lowest, leaving out any incidents with 0 injuries.
+
+```{r echo = TRUE}
+fatalities <- stormDamage %>% group_by(FATALITIES) %>%
+                filter(FATALITIES >= 1) %>%
+                arrange(desc(FATALITIES))
+fatalities
+                
+```
+
+And here we have Fatalities sorted by highest fatality count to the lowest leaving out any incidents with 0 fatalities. I left in the data on the size and length of the storm as well as its F-Scale to determine exactly what that particular tornado was.
+
+Next creating tables for Crop and Property damage
+
+```{r echo = TRUE}
+
+#Cleaning up Crop Damage data 
+stormDamage <- mutate(stormDamage, cropDamage = CROPDMG * CROPDMGFACTOR)
+
+#Cleaning up Property Damage and adding in Crop Damage as that is property damage as well.
+stormDamage <- mutate(stormDamage, propDamage = cropDamage + PROPDMG * PROPDMGFACTOR)
+
+#Filtering Property and Crop Damage
+
+cropDamage1 <- stormDamage %>% group_by(cropDamage) %>%
+                filter(cropDamage >= 1) %>%
+                arrange(desc(cropDamage))
+cropDamage1
+                
+```
+
+And next we filter Property Damage as that is important as well, as not all damage that happens to property is crop related.
+
+```{r echo = TRUE}
+propDamage1 <- stormDamage %>% group_by(propDamage) %>%
+                filter(propDamage >= 1) %>%
+                arrange(desc(propDamage))
+propDamage1
+                
+```
+
+But first, we need to clean up the EVTYPE data.
+
+```{r echo = TRUE}
+stormDamage$EVTYPE <- toupper(stormDamage$EVTYPE)
+dim(data.frame(table(stormDamage$EVTYPE)))
+```
+
+There are over 898 types of Environmental Type records, most of them repeats or named something incredibly specific. As much as I have tried to get as much of this information as possible. This will not work. 
+
+But first condensing the Health and Economic impacts of the storm into two categories.
+
+```{r echo = TRUE}
+stormDamage <- mutate(stormDamage, healthImp = FATALITIES + INJURIES)
+stormDamage <- mutate(stormDamage, ecoCost = PROPDMG * PROPDMGFACTOR + CROPDMG * CROPDMGFACTOR)
+``` 
+
+Now to clean up the EVTYPE data.
+ 
+```{r echo = true}
+healthImpact <- with(stormDamage, aggregate(healthImp ~ EVTYPE, FUN = sum))
+subset(healthImpact, healthImp > quantile(healthImp, prob = 0.95))
+
+economicCost <- with(stormDamage, aggregate(ecoCost ~ EVTYPE, FUN = sum))
+subset(economicCost, ecoCost > quantile(ecoCost, prob = 0.95))
+```
+ 
+
+Now the list has gone from 898 to 44 and 45 records respectively, narrowing down the numbers considerably
+
+ 
+###Results
+
+```{r echo = TRUE}
+healthImpact2 <- stormDamage %>% 
+                group_by(EVTYPE) %>% 
+                summarise(healthImp = sum(healthImp)) %>% 
+                arrange(desc(healthImp))
+
+
+boxplot(healthImp~EVTYPE,data=stormDamage, main="Effects of Storms on human life",
+   xlab="Event", ylab="Casualties and Human Collateral")
+
+```
+
+
+Apologies for the crude graph, but with the amount of data available this was the best choice and I didn't want to break the graph further.
+
+Tornadoes seem to be one of the highest sources of human collateral. 
+
+ 
+
+The cleaned data frame stormDamage is been aggregated per EVTYPE and provided in a descending order in the new data frame economicCost.
+
+```{r echo = TRUE}
+economicCost <- stormDamage %>% 
+                group_by(EVTYPE) %>% 
+                summarise(ecoCost = sum(ecoCost)) %>% 
+                arrange(desc(ecoCost))
+
+boxplot(ecoCost~EVTYPE,data=stormDamage, main="Effects of Storms on property and crop damage",
+   xlab="Event", ylab="Property and Crop Damage")
+
+```
+
+Floods, flash floods, and Hurricanes have caused exorbitant amounts of damage combined, somewhere in the hundreds of billions of dollars in property damage.
+
+In conclusion Tornadoes and Flooding have created the most damage to ourselves and the environment.
